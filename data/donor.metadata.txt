@@ -1,0 +1,6 @@
+eso29	79	M
+cu01	79	F
+cu02	76	F
+cu03	77	F
+cu08	63	M
+evb01	29	

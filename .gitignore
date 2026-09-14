@@ -2,8 +2,6 @@
 .Rhistory
 .Rapp.history
 
-# I only want some scripts
-data
 
 # Session Data files
 .RData
