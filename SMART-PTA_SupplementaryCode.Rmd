@@ -35,6 +35,7 @@ library(AnnotationDbi)
 library(org.Hs.eg.db)
 library(HMMcopy)
 library(Biostrings)
+library(treestats)
 
 knitr::opts_chunk$set(echo = FALSE, warning=FALSE, message = FALSE, eval = F)
 fig_dir="/gpfs/commons/groups/landau_lab/ResolveOME/Figures/"
@@ -7396,6 +7397,295 @@ AllTreeInfo %>%
 
 ```
 
+
+
+
+## Figure S12
+
+```{r}
+
+# A
+# polyclonal
+polyclonal <- read.tree(text = "((A:6.9, B:6.9):0.1, (C:6.5, D:6.5):0.5);")
+current_depth <- max(ape::node.depth.edgelength(polyclonal))
+polyclonal$edge.length <- polyclonal$edge.length / current_depth
+phylodiv_polyclonal <- treestats::calc_all_stats(polyclonal)["phylogenetic_div"]
+
+oligoclonal <- read.tree(text = "(A:10, (B:3, (C:1, D:1):2):7);")
+current_depth <- max(ape::node.depth.edgelength(oligoclonal))
+oligoclonal$edge.length <- oligoclonal$edge.length / current_depth
+phylodiv_oligoclonal <- treestats::calc_all_stats(oligoclonal)["phylogenetic_div"]
+
+polyclonal_star <- read.tree(text = "(A:10, B:10, C:10, D:10);")
+current_depth <- max(ape::node.depth.edgelength(polyclonal_star))
+polyclonal_star$edge.length <- polyclonal_star$edge.length / current_depth
+phylodiv_polyclonal_star <- treestats::calc_all_stats(polyclonal_star)["phylogenetic_div"]
+
+
+p1<- ggtree(polyclonal) +
+  geom_text2(aes(label = round(branch.length,2)), 
+             vjust = -0.5, hjust=1.5, color = "grey") +
+  geom_treescale(x=0, y=4.2, width=1, color='dodgerblue') +
+  geom_vline(xintercept = 0.05, linetype=2) +
+  labs(title = paste0("Polyclonal\nPhylogenetic Div. = ", round(phylodiv_polyclonal, 2)))
+p2<-ggtree(oligoclonal) +
+  geom_text2(aes(label = branch.length), 
+             vjust = -0.5, hjust=1.5, color = "grey") +
+  geom_treescale(x=0, y=4.2, width=1, color='dodgerblue') +
+  geom_vline(xintercept = 0.05, linetype=2) +
+  labs(title = paste0("Oligoclonal\nPhylogenetic Div. = ", round(phylodiv_oligoclonal, 2)))
+p3<- ggtree(polyclonal_star) +
+  geom_text2(aes(label = branch.length), 
+             vjust = -0.5, hjust=1.5, color = "grey") +
+  geom_vline(xintercept = 0.05, linetype=2) +
+  geom_treescale(x=0, y=4.2, width=1, color='dodgerblue') +
+  labs(title = paste0("Polyclonal\nPhylogenetic Div. = ", round(phylodiv_polyclonal_star, 2)))
+
+
+p1 + p2 + patchwork::plot_layout(ncol = 2, widths = c(1, 1))
+#ggsave(paste0(fig_dir,"/Schematic.PD.numclones.pdf"), width = 7, height = 3.5)
+
+
+# B
+donor <- "cu01"
+eso_old <- readRDS(paste0(input_figs, "/phylogeny.",donor,".RDS"))
+donor <- "cu02"
+eso_old_2 <- readRDS(paste0(input_figs,"/phylogeny.",donor,".RDS"))
+donor <- "cu03"
+eso_old_3 <- readRDS(paste0(input_figs, "/phylogeny.",donor,".RDS"))
+# Download from https://github.com/emily-mitchell/normal_haematopoiesis/blob/main/11_LOY_simulations/input/
+# considered old in the publication
+# KX003 (81yo) male
+old_blood <- ape::read.tree(file=paste0(input_figs,"/KX003_ultra.tree"))
+
+ClonalSizeCalculation <- function(tree, cut_age=0.05) {
+  
+  # Get node depths (from root)
+  node_depths <- ape::node.depth.edgelength(tree)
+  
+  # Find edges that cross the threshold (cutting point)
+  crossing_edges <- which(
+    node_depths[tree$edge[, 1]] < cut_age &
+      node_depths[tree$edge[, 2]] >= cut_age
+  )
+  
+  # Get child nodes immediately above the cut
+  post_cut_nodes <- tree$edge[crossing_edges, 2]
+  
+  # Function to get descendants of a node
+  get_descendants <- function(tree, node) {
+    phangorn::Descendants(tree, node, type = "all")[[1]]
+  }
+  
+  # Find descendants for each post-cut node
+  all_descendants <- sapply(post_cut_nodes, function(node) get_descendants(tree, node))
+  
+  # Flatten and get unique list of descendants
+  all_descendants_flat <- unique(unlist(all_descendants))
+  
+  # Optional: Get labels for those nodes
+  tip_labels <- tree$tip.label
+  internal_labels <- tree$node.label
+  Ntip <- length(tip_labels)
+  
+  # Remove any nodes that are descendants of another post-cut node but keep terminal nodes
+  # Identify tips among post_cut_nodes
+  tips_in_post_cut <- post_cut_nodes[post_cut_nodes <= Ntip]
+  # Keep internal post_cut_nodes that are not descendants of others
+  internal_nodes <- post_cut_nodes[post_cut_nodes > Ntip]
+  all_internal_descendants <- unique(unlist(sapply(internal_nodes, get_descendants, tree = tree)))
+  final_internal_nodes <- internal_nodes[!internal_nodes %in% all_internal_descendants]
+  # Combine tips and filtered internal nodes
+  final_post_cut_nodes <- c(tips_in_post_cut, final_internal_nodes)
+  
+  # Function to get leaf descendants of a node
+  get_leaf_descendants <- function(tree, node) {
+    desc <- phangorn::Descendants(tree, node, type = "tips")[[1]]
+    out <- cbind(num_tips=length(desc))
+    return(out)  # Return number of leaf descendants (tips)
+  }
+  
+  # Find the number of leaf descendants for each post-cut node
+  descendants_counts <- sapply(lapply(final_post_cut_nodes, function(node) phangorn::Descendants(tree, node, type = "tips")[[1]]), length)
+  
+  
+  # Match labels to remaining post-cut nodes
+  remaining_labels <- sapply(final_post_cut_nodes, function(n) {
+    if (n <= Ntip) tip_labels[n] else internal_labels[n - Ntip]
+  })
+  
+  # Final result with descendant count
+  result <- data.frame(
+    node = final_post_cut_nodes,
+    n_descendants = descendants_counts)
+  return(result)
+}
+
+donor_ages <- c("KX002" = 38, "KX001" = 29, "AX001" = 63, "KX003" = 81, "cu01" = 79, "cu02"= 76, "cu03"=77)
+
+
+EvaluationTrees_with_Reps <- function(cells, reps = 10, donor="cu03") {
+  
+  max_study_age <- max(donor_ages)
+  current_age <- donor_ages[donor]
+  target_height <- 1 
+
+  if (grepl("^(KX|AX)",donor)){
+    
+    # BLOOD
+    #KX003 81
+    true_tree <- read.tree(paste0("Downloads/",donor,"_ultra.tree")) # 38yo (K002)
+    true_tree$tip.label <- gsub(".*_","",true_tree$tip.label)
+    raw_max_depth <- max(ape::node.depth.edgelength(true_tree))
+    true_tree$edge.length <- (true_tree$edge.length / raw_max_depth) * target_height
+    avg_branch_length.true <- mean(true_tree$edge.length)
+    length(true_tree$tip.label)
+  } else {
+    true_tree <- readRDS(paste0("Documents/phylogeny.",donor,".RDS"))
+    true_tree <- treeio::drop.tip(true_tree, tip = "zeros")
+    true_tree@phylo$tip.label <- gsub(".*_","",true_tree@phylo$tip.label)
+    immune <- true_tree %>% as_tibble() %>% 
+      dplyr::select(label,celltype) %>% 
+      dplyr::filter(celltype=="CD45+") %>%
+      dplyr::select(label) %>% unlist()
+    epi.tree <- treeio::drop.tip(true_tree, tip = immune)
+    true_tree <- epi.tree
+    raw_max_depth <- max(ape::node.depth.edgelength(true_tree@phylo))
+    true_tree@phylo$edge.length <- (true_tree@phylo$edge.length / raw_max_depth) * target_height
+    avg_branch_length.true <- mean(true_tree@phylo$edge.length)
+    length(true_tree@phylo$tip.label)
+    true_tree <- true_tree@phylo 
+  }
+  
+  
+  print(cells)
+  # Internal loop for replicates
+  replicate_data <- lapply(1:reps, function(i) {
+    
+    tips_2drop = length(true_tree$tip.label) - cells
+    # Each iteration gets a different random sample
+    downsampled_tree <- treeio::drop.tip(true_tree, sample(true_tree$tip.label, tips_2drop))  
+    downsampled_tree <- downsampled_tree  
+    ggtree(downsampled_tree)
+    gamma_val <- ape::gammaStat(downsampled_tree)
+    all_stats <- treestats::calc_all_stats(downsampled_tree)
+   
+    clone_sizes <- ClonalSizeCalculation(tree = downsampled_tree) 
+    
+    
+    # average branch length
+    avg_branch_length <- mean(downsampled_tree$edge.length)
+    
+    # Return a data frame row
+    data.frame(
+      replicate = i,
+      ncells = cells, 
+      gamma = gamma_val, 
+      nltt=all_stats["nltt_base"],
+      nltt_base=all_stats["nltt_base"],
+      nodeID=clone_sizes$node,
+      nclones=clone_sizes$n_descendants,
+      n_internalnodes=downsampled_tree$Nnode,
+      colless=all_stats["colless"],
+      sackin=all_stats["sackin"],
+      phylogenetic_div=all_stats["phylogenetic_div"], 
+      avg_branch_length = avg_branch_length,
+      pigot_rho=all_stats["pigot_rho"],
+      donor=donor
+    )
+  })
+  
+  return(do.call(rbind, replicate_data))
+}
+
+
+# esophagus
+benchmark_esophagus_cu01 <- do.call("rbind",lapply(X = c(300,200,150,100,50,25,10),EvaluationTrees_with_Reps, donor="cu01"))
+benchmark_esophagus_cu02 <- do.call("rbind",lapply(X = c(300,200,150,100,50,25,10),EvaluationTrees_with_Reps, donor="cu02"))
+benchmark_esophagus_cu03 <- do.call("rbind",lapply(X = c(300,200,150,100,50,25,10),EvaluationTrees_with_Reps, donor="cu03"))
+# Blood
+#KX003 81
+# https://github.com/emily-mitchell/normal_haematopoiesis/tree/main/11_LOY_simulations/input
+benchmark_bloodold_KX003 <- do.call("rbind",lapply(X = c(300,200,150,100,50,25,10),EvaluationTrees_with_Reps, donor="KX003"))
+
+
+# B
+# mean branch length and phylogenetic diversity
+
+benchmark_long <- rbind(benchmark_esophagus_cu03, benchmark_esophagus_cu01,benchmark_bloodold_KX003) %>%
+  dplyr::select(-nodeID,-nclones) %>%
+  unique() %>%
+  tidyr::pivot_longer(cols = c(nltt,phylogenetic_div,avg_branch_length)) %>%
+  dplyr::mutate(name=ifelse(name=="avg_branch_length","Mean (normalized) branch lengths",ifelse(name=="phylogenetic_div","Phylogenetic diversity", "Normalized Lineages-Through-Time")))
+
+benchmark_long  %>%
+  dplyr::filter(name!="Normalized Lineages-Through-Time") %>%
+  dplyr::mutate(donor=gsub("KX003","HSCs (81 yo)",gsub("cu03","eso04",gsub("cu02","eso03",gsub("cu01","eso02",gsub("eso29", "eso01",donor)))))) %>%
+  dplyr::mutate(Tissue=ifelse(grepl("eso",donor),"Esophageal epithelium","HSCs from peripharal blood/bone marrow")) %>%
+  dplyr::mutate(total_cell_number=ifelse(Tissue=="Esophageal epithelium", 80000, 200000)) %>%
+  dplyr::mutate(name=ifelse(name=="Mean (normalized) branch lengths","Mean clonal age\n(mean branch length)",name)) %>%
+  ggplot() +
+  geom_boxplot(aes(as.factor(ncells), value, col=donor),outlier.shape = NA,position = position_dodge(0.8)) +
+  geom_smooth(aes(x = as.numeric(as.factor(ncells)), y=value,col = donor), 
+              method = "loess", 
+              se = TRUE) +
+  theme_classic() +
+  facet_wrap(. ~ name, scales = "free_y") +
+  labs(x="Number of cells", y="", fill="Donor",col="Donor") +
+  labs(x="Sampled cells", y="", fill="Donor",col="Donor") +
+  theme(strip.background = element_blank(), legend.position = "bottom") +
+  scale_color_manual(values = c("skyblue3","skyblue","tomato")) +
+  scale_fill_manual(values = c("skyblue3","skyblue","tomato"))
+
+
+#ggsave("Documents/Figs.eso.RSO/branchlength.nltt.cut.pdf", width = 6, height = 4.5)
+
+
+# C
+rbind(benchmark_esophagus_cu03, benchmark_esophagus_cu01, benchmark_bloodold_KX003) %>%
+  dplyr::mutate(donor=gsub("KX003","HSCs (~80 yo)",gsub("cu03","eso04",gsub("cu02","eso03",gsub("cu01","eso02",gsub("eso29", "eso01",donor)))))) %>%
+  dplyr::select(nodeID,ncells, nclones, replicate, donor) %>%
+  dplyr::group_by(replicate, donor, ncells) %>%
+  dplyr::summarize(num_clones=sum(nclones>1)) %>%
+  dplyr::mutate(Age=ifelse(donor=="KX002", "Young","Old")) %>%
+  dplyr::filter(donor %in% c("HSCs (~80 yo)","eso02","eso04")) %>%
+  dplyr::mutate(Tissue=ifelse(grepl("eso",donor),"Esophageal epithelium","HSCs from peripharal blood/bone marrow")) %>%
+  ggplot(aes(as.factor(ncells), y=num_clones, fill=donor)) +
+    geom_boxplot() +
+  geom_smooth(aes(group=donor,col=donor), method = "loess", col="black") +
+  theme_classic() +
+  scale_color_manual(values = c("skyblue","skyblue4","tomato")) +
+  scale_fill_manual(values = c("skyblue","skyblue4","tomato")) +
+  labs(x="Sampled cells",y="Number of clones\n(with more than 1 cell)")
+
+#ggsave(paste0(fig_dir,"/Figs.eso.RSO/NumberClones.morethan1cell.pdf"), width = 4.5, height = 3)
+
+
+# D
+rbind(benchmark_esophagus_cu03, benchmark_esophagus_cu01, 
+       benchmark_bloodold_KX003) %>%
+  dplyr::mutate(donor=gsub("KX002","HSCs (~30 yo)",gsub("KX003","HSCs (~80 yo)",gsub("cu03","eso04",gsub("cu02","eso03",gsub("cu01","eso02",gsub("eso29", "eso01",donor))))))) %>%
+  dplyr::select(nodeID,ncells, nclones, replicate, donor) %>%
+  dplyr::filter(donor %in% c("HSCs (~80 yo)","eso02","eso04")) %>%
+  dplyr::group_by(replicate, donor, ncells) %>%
+  dplyr::summarize(num_clones=sum(nclones>1), num_clones_1cell=sum(nclones==1)) %>%
+  dplyr::mutate(Age=ifelse(donor=="KX002", "Young","Old")) %>%
+  dplyr::mutate(Tissue=ifelse(grepl("eso",donor),"Esophageal epithelium","HSCs from peripharal blood/bone marrow")) %>%
+  #  dplyr::mutate(total_cell_number=ifelse(Tissue=="Esophageal epithelium", 80000, 200000)) %>%
+  dplyr::mutate(ratio=num_clones/num_clones_1cell) %>%
+  ggplot(aes(as.factor(ncells), y=ratio, fill=donor)) +
+  #ggplot(aes(as.factor(ncells/total_cell_number), y=num_clones, fill=donor)) +
+  geom_boxplot() +
+  geom_smooth(aes(group=donor,col=donor), method = "loess", col="black") +
+  theme_classic() +
+  scale_color_manual(values = c("skyblue","skyblue4","tomato")) +
+  scale_fill_manual(values = c("skyblue","skyblue4","tomato")) +
+  labs(x="Sampled cells",y="Multicell to unicell ratio\n(late branching to embryonic branching ratio)")
+
+#ggsave(paste0(fig_dir, "/Figs.eso.RSO/Ratio-multi-uni.pdf"), width = 4.5, height = 3)
+
+
+```
 
 
 ## Figure S14
