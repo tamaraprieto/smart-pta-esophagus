@@ -658,6 +658,8 @@ sbatch ${SCRIPTSDIR}/AddClassifierAnnotations.sh ${MAINDIR}/StartDir/${patient}/
 
 ```{bash }
 
+# Run the classifier following the following notebook: classifier/cls-xg-feat-prod.ipynb
+
 jobid=$(sbatch ${SCRIPTSDIR}/FilterAfterClassifierAnnotations.sh $patient)
 
 # wait for previous to finish
@@ -5469,13 +5471,10 @@ tree_all_info_annotated <- readRDS(paste0(input_figs,"phylogeny.",patient,".RDS"
 
 ```{r}
 
-# is the increase in basal due to CNLOH??
   eso29_chr9cnloh <- fread("https://docs.google.com/spreadsheets/d/e/2PACX-1vTRE5hP8_2xk3TceUsJsiRZl9ZIXtdGC0oozMsXhHttU5_bJdgzoTN1M7VjIqrluLf4TOx-m-XcIlps/pub?gid=451686998&single=true&output=tsv")  %>% dplyr::filter(`Field labels`!="Tree node label") %>% dplyr::select(-`Field labels`)
-  #cu01_chr9cnloh <- fread("https://docs.google.com/spreadsheets/d/e/2PACX-1vTRE5hP8_2xk3TceUsJsiRZl9ZIXtdGC0oozMsXhHttU5_bJdgzoTN1M7VjIqrluLf4TOx-m-XcIlps/pub?gid=2040244804&single=true&output=tsv") %>% dplyr::filter(`Field labels`!="Tree node label") %>% dplyr::select(-`Field labels`)
   cu01_chr9cnloh <- fread("https://docs.google.com/spreadsheets/d/e/2PACX-1vTRE5hP8_2xk3TceUsJsiRZl9ZIXtdGC0oozMsXhHttU5_bJdgzoTN1M7VjIqrluLf4TOx-m-XcIlps/pub?gid=1816822111&single=true&output=tsv") %>% dplyr::filter(`Field labels`!="Tree node label") %>% dplyr::select(-`Field labels`)
   cu02_chr9cnloh <- fread("https://docs.google.com/spreadsheets/d/e/2PACX-1vTRE5hP8_2xk3TceUsJsiRZl9ZIXtdGC0oozMsXhHttU5_bJdgzoTN1M7VjIqrluLf4TOx-m-XcIlps/pub?gid=2039721467&single=true&output=tsv") %>% dplyr::filter(`Field labels`!="Tree node label") %>% dplyr::select(-`Field labels`)
   cu03_chr9cnloh <- fread("https://docs.google.com/spreadsheets/d/e/2PACX-1vTRE5hP8_2xk3TceUsJsiRZl9ZIXtdGC0oozMsXhHttU5_bJdgzoTN1M7VjIqrluLf4TOx-m-XcIlps/pub?gid=524303839&single=true&output=tsv")  %>% dplyr::filter(`Field labels`!="Tree node label") %>% dplyr::select(-`Field labels`) 
-  #cu08_chr9cnloh <- fread("https://docs.google.com/spreadsheets/d/e/2PACX-1vTRE5hP8_2xk3TceUsJsiRZl9ZIXtdGC0oozMsXhHttU5_bJdgzoTN1M7VjIqrluLf4TOx-m-XcIlps/pub?gid=887174270&single=true&output=tsv") %>% dplyr::filter(`Field labels`!="Tree node label") %>% dplyr::select(-`Field labels`) 
 cu08_chr9cnloh <- fread("https://docs.google.com/spreadsheets/d/e/2PACX-1vTRE5hP8_2xk3TceUsJsiRZl9ZIXtdGC0oozMsXhHttU5_bJdgzoTN1M7VjIqrluLf4TOx-m-XcIlps/pub?gid=1308949194&single=true&output=tsv") %>% dplyr::filter(`Field labels`!="Tree node label") %>% dplyr::select(-`Field labels`) 
     
   chr9cnloh_combined<- eso29_chr9cnloh %>%
@@ -9652,9 +9651,6 @@ p_cnloh <- ggplot(plotdata_cnloh, aes(x = CNLOH, y = proportion, fill = CNLOH)) 
 p_cnloh
 ggsave(paste0(fig_dir, "PhenotypeBias.CNLOH.r3.pdf"), plot = p_cnloh, width = 4, height = 3)
 ```
-
-
-
 
 
 ## Figure S22
